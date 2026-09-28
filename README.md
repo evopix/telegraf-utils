@@ -12,7 +12,8 @@ Based on:
 * `ghcr.io/evopix/telegraf-utils:<telegraf-version>` and `:latest` — published
   automatically by `.github/workflows/docker-publish.yml` on every push to
   `master` that touches the `Dockerfile`. The version tag tracks the pinned
-  `FROM telegraf:` version.
+  `FROM telegraf:` version. A GitHub release `v<telegraf-version>` is cut the
+  first time a new Telegraf version is published.
 * `evopix/telegraf-utils` on Docker Hub — same tags, opt-in: set the
   repository variable `PUSH_TO_DOCKERHUB=true` plus the
   `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` secrets.

@@ -2,8 +2,9 @@ name: Build and publish
 
 # Builds the custom image and publishes it to GHCR on every push to master
 # that touches the Dockerfile (including Renovate's Telegraf bump PRs, which
-# are validated with a push-less build). Docker Hub publishing is opt-in:
-# set the repository variable PUSH_TO_DOCKERHUB=true plus the
+# are validated with a push-less build). A GitHub release v<version> is cut
+# only when the pinned Telegraf version itself is new. Docker Hub publishing
+# is opt-in: set the repository variable PUSH_TO_DOCKERHUB=true plus the
 # DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets (see README).
 
 # NOTE on supply chain: every third-party action below is pinned to a full
@@ -68,6 +69,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      version: ${{ steps.telegraf-version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -144,3 +147,30 @@ jobs:
           tags: ${{ steps.meta-hub.outputs.tags }}
           labels: ${{ steps.meta-hub.outputs.labels }}
           cache-from: type=gha
+
+  release:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # No checkout needed: gh creates the tag and release via the API.
+      # Skips silently when v<version> already exists, so Dockerfile-only
+      # tweaks and workflow edits never cut duplicate releases.
+      - name: Create release for new Telegraf versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAF_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION="${TELEGRAF_VERSION}"
+          [[ "${VERSION}" =~ ^[0-9.]+$ ]]
+          TAG="v${VERSION}"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists, skipping."
+            exit 0
+          fi
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes "Custom Telegraf image built from telegraf:${VERSION} plus smartmontools (see Dockerfile). Pull: \`ghcr.io/evopix/telegraf-utils:${VERSION}\`"
