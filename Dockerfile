@@ -17,7 +17,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 # produces duplicate-sources warnings). snmp-mibs-downloader is for
 # snmptranslate convenience (telegraf's snmp input itself is pure Go).
 # NOTE: lm-sensors and snmp already ship in the base image — only smartmontools
-# (+ convenience MIBs) need adding here.
+# (+ convenience MIBs) and nvme-cli (NVMe forensics alongside smartctl) need
+# adding here.
 RUN set -ex; \
     . /etc/os-release; \
     printf '%s\n' \
@@ -26,5 +27,5 @@ RUN set -ex; \
       "deb http://security.debian.org/debian-security ${VERSION_CODENAME}-security contrib non-free" \
       > /etc/apt/sources.list.d/argon-utils.list; \
     apt-get update; \
-    apt-get -y install snmp-mibs-downloader smartmontools; \
+    apt-get -y install snmp-mibs-downloader smartmontools nvme-cli; \
     rm -rf /var/lib/apt/lists/*

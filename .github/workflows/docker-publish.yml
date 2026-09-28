@@ -174,4 +174,4 @@ jobs:
           fi
           gh release create "${TAG}" -R "${TARGET_REPO}" \
             --title "${TAG}" \
-            --notes "Custom Telegraf image built from telegraf:${VERSION} plus smartmontools (see Dockerfile). Pull: \`ghcr.io/evopix/telegraf-utils:${VERSION}\`"
+            --notes "Custom Telegraf image built from telegraf:${VERSION} plus smartmontools and nvme-cli (see Dockerfile). Pull: \`ghcr.io/evopix/telegraf-utils:${VERSION}\`"
