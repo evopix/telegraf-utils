@@ -155,22 +155,23 @@ jobs:
     permissions:
       contents: write
     steps:
-      # No checkout needed: gh creates the tag and release via the API.
-      # Skips silently when v<version> already exists, so Dockerfile-only
-      # tweaks and workflow edits never cut duplicate releases.
+      # No checkout: gh targets the repo explicitly via -R, so no local clone
+      # is needed. Skips silently when v<version> already exists, so
+      # Dockerfile-only tweaks and workflow edits never cut duplicates.
       - name: Create release for new Telegraf versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TELEGRAF_VERSION: ${{ needs.build.outputs.version }}
+          TARGET_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           VERSION="${TELEGRAF_VERSION}"
           [[ "${VERSION}" =~ ^[0-9.]+$ ]]
           TAG="v${VERSION}"
-          if gh release view "${TAG}" >/dev/null 2>&1; then
+          if gh release view "${TAG}" -R "${TARGET_REPO}" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists, skipping."
             exit 0
           fi
-          gh release create "${TAG}" \
+          gh release create "${TAG}" -R "${TARGET_REPO}" \
             --title "${TAG}" \
             --notes "Custom Telegraf image built from telegraf:${VERSION} plus smartmontools (see Dockerfile). Pull: \`ghcr.io/evopix/telegraf-utils:${VERSION}\`"
