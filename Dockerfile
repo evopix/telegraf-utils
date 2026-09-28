@@ -1,20 +1,28 @@
 # Partially based on https://github.com/nuntz/telegraf-snmp
-FROM telegraf
+# Pinned to the telegraf 1.x line: floating :latest once baked a 2020-era
+# binary whose Docker client (API v1.21) modern daemons refuse (minimum v1.24).
+# NOTE: no bare :1 major-only tag exists upstream, so pin the newest 1.x minor
+# (1.40 ⇒ 1.40.1) and bump it manually when the next minor lands.
+FROM telegraf:1.40
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN export DEBIAN_RELEASE=$(awk -F'[" ]' '/VERSION=/{print $3}'  /etc/os-release | tr -cd '[[:alnum:]]._-' ) && \
-     echo "remove main from /etc/apt/sources.list" && \
-     sed -i '/main/d' /etc/apt/sources.list && \
-     echo "remove contrib from /etc/apt/sources.list" && \
-     sed -i '/contrib/d' /etc/apt/sources.list && \
-     echo "remove non-free from /etc/apt/sources.list" && \
-     sed -i '/non-free/d' /etc/apt/sources.list && \
-     echo "deb http://deb.debian.org/debian ${DEBIAN_RELEASE} main contrib non-free"  >> /etc/apt/sources.list && \
-     echo "deb http://deb.debian.org/debian ${DEBIAN_RELEASE}-updates main contrib non-free"  >> /etc/apt/sources.list && \
-     echo "deb http://security.debian.org ${DEBIAN_RELEASE}/updates main contrib non-free"  >> /etc/apt/sources.list && \
-    set -x &&\
-    apt-get update && \
-    apt-get -y install snmp-mibs-downloader smartmontools && \
-    rm -r /var/lib/apt/lists/*
-    
+# smartmontools (inputs.smart) lives outside main, so the base sources (which
+# carry main only) need extending. Uses VERSION_CODENAME (bookworm/trixie/…)
+# and the current -security suite layout; writes a dedicated list instead of
+# editing the base sources, which are DEB822-format on modern images.
+# Only contrib/non-free are added (main already present — re-adding it only
+# produces duplicate-sources warnings). snmp-mibs-downloader is for
+# snmptranslate convenience (telegraf's snmp input itself is pure Go).
+# NOTE: lm-sensors and snmp already ship in the base image — only smartmontools
+# (+ convenience MIBs) need adding here.
+RUN set -ex; \
+    . /etc/os-release; \
+    printf '%s\n' \
+      "deb http://deb.debian.org/debian ${VERSION_CODENAME} contrib non-free" \
+      "deb http://deb.debian.org/debian ${VERSION_CODENAME}-updates contrib non-free" \
+      "deb http://security.debian.org/debian-security ${VERSION_CODENAME}-security contrib non-free" \
+      > /etc/apt/sources.list.d/argon-utils.list; \
+    apt-get update; \
+    apt-get -y install snmp-mibs-downloader smartmontools; \
+    rm -rf /var/lib/apt/lists/*
