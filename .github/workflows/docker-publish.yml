@@ -1,0 +1,146 @@
+name: Build and publish
+
+# Builds the custom image and publishes it to GHCR on every push to master
+# that touches the Dockerfile (including Renovate's Telegraf bump PRs, which
+# are validated with a push-less build). Docker Hub publishing is opt-in:
+# set the repository variable PUSH_TO_DOCKERHUB=true plus the
+# DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets (see README).
+
+# NOTE on supply chain: every third-party action below is pinned to a full
+# commit SHA (tag kept as a trailing comment so Renovate's github-actions
+# manager can still bump it). A floating tag can be moved to compromised code
+# after review — a SHA cannot. The linter binaries in the lint job get the
+# same treatment: actionlint is version-pinned with a SHA256 check, zizmor
+# with an exact PyPI pin.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - Dockerfile
+      - .github/workflows/docker-publish.yml
+  pull_request:
+    branches: [master]
+    paths:
+      - Dockerfile
+      - .github/workflows/docker-publish.yml
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      ZIZMOR_VERSION: 1.30.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  /tmp/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+
+      - name: Install zizmor
+        run: |
+          set -euo pipefail
+          pipx install "zizmor==${ZIZMOR_VERSION}"
+
+      - name: Run actionlint
+        run: /tmp/actionlint
+
+      - name: Run zizmor
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: zizmor --format github .
+
+  build:
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Extract Telegraf version from Dockerfile
+        id: telegraf-version
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -oP '(?<=^FROM telegraf:)[0-9.]+' Dockerfile | head -1)"
+          # Fail closed: never tag/push an image with an empty version.
+          [ -n "${VERSION}" ]
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request' && vars.PUSH_TO_DOCKERHUB == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker metadata (GHCR)
+        id: meta-ghcr
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ghcr.io/evopix/telegraf-utils
+          tags: |
+            type=raw,value=${{ steps.telegraf-version.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Docker metadata (Docker Hub)
+        id: meta-hub
+        if: vars.PUSH_TO_DOCKERHUB == 'true'
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: evopix/telegraf-utils
+          tags: |
+            type=raw,value=${{ steps.telegraf-version.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push to GHCR
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-ghcr.outputs.tags }}
+          labels: ${{ steps.meta-ghcr.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push to Docker Hub
+        if: github.event_name != 'pull_request' && vars.PUSH_TO_DOCKERHUB == 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-hub.outputs.tags }}
+          labels: ${{ steps.meta-hub.outputs.labels }}
+          cache-from: type=gha

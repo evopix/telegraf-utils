@@ -1,9 +1,11 @@
 # Partially based on https://github.com/nuntz/telegraf-snmp
 # Pinned to the telegraf 1.x line: floating :latest once baked a 2020-era
 # binary whose Docker client (API v1.21) modern daemons refuse (minimum v1.24).
-# NOTE: no bare :1 major-only tag exists upstream, so pin the newest 1.x minor
-# (1.40 ⇒ 1.40.1) and bump it manually when the next minor lands.
-FROM telegraf:1.40
+# NOTE: no bare :1 major-only tag exists upstream, so pin the exact version
+# and let Renovate (renovate.json) own the bumps: patches automerge, minors
+# need a human (a minor jump can change input behavior — see the 1.15→1.40
+# config-compat notes in the argon repo).
+FROM telegraf:1.40.1
 
 ARG DEBIAN_FRONTEND=noninteractive
 

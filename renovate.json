@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "github actions",
+      "automerge": true
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "github actions",
+      "automerge": false
+    },    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["telegraf"],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "telegraf base image",
+      "automerge": true,
+      "commitMessageTopic": "Update Telegraf Docker base image"
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["telegraf"],
+      "matchUpdateTypes": ["minor", "major"],
+      "groupName": "telegraf base image",
+      "automerge": false,
+      "commitMessageTopic": "Update Telegraf Docker base image"
+    }
+  ]
+}
